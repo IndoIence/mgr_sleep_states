@@ -3,9 +3,8 @@ import matplotlib.pyplot as plt
 import mne
 import numpy as np
 from MyEDFImports import get_edf_filenames
+
 edf_dir = r"Jean-Pol_repaired_headers"
-
-
 
 
 def read_raw_edf(edf_path):
