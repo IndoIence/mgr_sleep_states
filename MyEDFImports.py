@@ -22,7 +22,7 @@ stages_names_3_outputs = {
 
 
 def date_from_comment(file):
-    "this can be just taken from mne info meas_date probably"
+    """this can be just taken from mne info meas_date probably"""
     with open(file) as f:
         for line in f:
             if line.startswith("% night ="):
@@ -62,6 +62,16 @@ def get_edf_filenames(path=edf_dir):
     edf_files = [name for name in edf_files if '_' not in name]
     return edf_files
 
+def load_data(edf):
+    # this can be problematic if my frequency changes in different times
+    sampl_freq = edf.info["sfreq"]
+    window_len = int(sampl_freq * 20)
+    nr_windows = int(len(edf[0][1]) // window_len)
+    print(f'file with {nr_windows} windows')
+    y = edf[0][0].reshape(-1)
+    y = y[0:nr_windows * window_len]
+    y = y.reshape((-1, window_len))
+    return y
 
 def load_all_data():
     names = get_edf_filenames()
@@ -69,13 +79,7 @@ def load_all_data():
     edfs = [import_ecg(f) for f in names]
     all_data = np.array([])
     for edf in edfs:
-        # this can be problematic if my frequency changes in different times
-        sampl_freq = edf.info["sfreq"]
-        window_len = int(sampl_freq * 20)
-        nr_windows = int(len(edf[0][1]) // window_len)
-        print(f'loading file with nr of windows {nr_windows}')
-        y = edf[0][0].reshape(-1)
-        y = y[0:nr_windows * window_len]
+        y = load_data(edf)
         all_data = np.append(all_data, y)
 
     return all_data.reshape((-1, int(1e4)))
