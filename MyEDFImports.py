@@ -4,7 +4,7 @@ import mne
 import numpy as np
 import sys
 
-edf_dir = r"Jean-Pol_repaired_headers"
+edf_dir = r"/home/tadeusz/Desktop/Tadeusz/mgr_sleep_states/Jean-Pol_repaired_headers"
 
 stages_names = {
     0: 'Wake',
@@ -62,6 +62,7 @@ def get_edf_filenames(path=edf_dir):
     edf_files = [name for name in edf_files if '_' not in name]
     return edf_files
 
+
 def load_data(edf):
     # this can be problematic if my frequency changes in different times
     sampl_freq = edf.info["sfreq"]
@@ -72,6 +73,7 @@ def load_data(edf):
     y = y[0:nr_windows * window_len]
     y = y.reshape((-1, window_len))
     return y
+
 
 def load_all_data():
     names = get_edf_filenames()
@@ -112,3 +114,12 @@ def three_stages_transform(l):
         return 1
 
     return list(map(helper, l))
+
+
+def remove_ecg_artifacts(data, labels=None, threshold=0.0026):
+    # removes all 20s datapoints and their labels from the pool if there is a point over certain threshold
+    ecg_artifact_filter = np.all(np.abs(data) <= threshold, axis=1)
+    if labels is not None:
+        labels = labels[ecg_artifact_filter]
+    data = data[ecg_artifact_filter]
+    return data, labels
