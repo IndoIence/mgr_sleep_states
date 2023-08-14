@@ -4,6 +4,8 @@ import mne
 import numpy as np
 import sys
 
+from matplotlib import pyplot as plt
+
 edf_dir = r"/home/tadeusz/Desktop/Tadeusz/mgr_sleep_states/Jean-Pol_repaired_headers"
 
 stages_names = {
@@ -58,17 +60,18 @@ def import_eeg(name, tmin, tmax, path=edf_dir, ):
 def get_edf_filenames(path=edf_dir):
     all_files = os.listdir(path)
     edf_files = list(filter(lambda x: x[-4:] == '.edf', all_files))
+    edf_files = sorted(edf_files)
     # this removes _waking and such that are included in the directory
     edf_files = [name for name in edf_files if '_' not in name]
     return edf_files
 
 
-def load_data(edf):
-    # this can be problematic if my frequency changes in different times
+def load_data_one_file(edf):
+    """takes in an EDF not a string"""
     sampl_freq = edf.info["sfreq"]
     window_len = int(sampl_freq * 20)
     nr_windows = int(len(edf[0][1]) // window_len)
-    print(f'file with {nr_windows} windows')
+    print(f'{edf} with {nr_windows} windows')
     y = edf[0][0].reshape(-1)
     y = y[0:nr_windows * window_len]
     y = y.reshape((-1, window_len))
@@ -81,7 +84,7 @@ def load_all_data():
     edfs = [import_ecg(f) for f in names]
     all_data = np.array([])
     for edf in edfs:
-        y = load_data(edf)
+        y = load_data_one_file(edf)
         all_data = np.append(all_data, y)
 
     return all_data.reshape((-1, int(1e4)))
@@ -92,10 +95,18 @@ def load_all_labels():
     all_stages = []
     for name in edfs_names:
         fname = edf_dir + '//' + name + '_stages.txt'
+        print(f'loading from {fname}')
         stages = pd.read_csv(fname, comment='%', delimiter='	', index_col=0).drop('Unnamed: 3', axis=1)
         raw_stages = np.copy(stages['stage'])
         all_stages.extend(raw_stages)
     return np.array(all_stages)
+
+
+def load_labels_one_file(name):
+    fname = edf_dir + '//' + name + '_stages.txt'
+    print(f'loading from {fname}')
+    stages = pd.read_csv(fname, comment='%', delimiter='	', index_col=0).drop('Unnamed: 3', axis=1)
+    return np.copy(stages['stage'])
 
 
 def sizeof(obj):
@@ -116,10 +127,27 @@ def three_stages_transform(l):
     return list(map(helper, l))
 
 
-def remove_ecg_artifacts(data, labels=None, threshold=0.0026):
+def remove_ecg_artifacts(data, labels=None, threshold=0.003):
     # removes all 20s datapoints and their labels from the pool if there is a point over certain threshold
     ecg_artifact_filter = np.all(np.abs(data) <= threshold, axis=1)
     if labels is not None:
         labels = labels[ecg_artifact_filter]
     data = data[ecg_artifact_filter]
     return data, labels
+
+
+def draw_hypnogram(y, y_stages, name=None):
+    assert len(y) == len(y_stages)
+    fig, ax1 = plt.subplots(figsize=(20, 6))
+    ax2 = ax1.twinx()
+    ax1.step(y, 'b-')
+    ax2.step(y_stages, 'g-')
+    ax2.invert_yaxis()
+    ax1.set_xlabel('time [s]')
+    ax1.set_ylabel('Voltage [V]', color='b')
+    ax2.set_ylabel('Sleep Stage', color='g')
+    ax1.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
+    # plt.legend(['ECG'])
+    if name is not None:
+        plt.title(f"ECG of {name}")
+    return ax1
