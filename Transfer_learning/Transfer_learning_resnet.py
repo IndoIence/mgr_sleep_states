@@ -2,9 +2,9 @@
 # coding: utf-8
 
 # In[1]:
-
-
 import os
+
+import matplotlib.pyplot as plt
 import torch
 import torchvision
 import numpy as np
@@ -12,7 +12,7 @@ import torch.optim as optim
 import torch.nn as nn
 import time
 from torch.optim import lr_scheduler
-from datetime import date
+from datetime import date, datetime
 from torch.utils.data import random_split
 
 from torchvision import transforms, models
@@ -22,22 +22,46 @@ from tempfile import TemporaryDirectory
 from Transfer_learning.my_pytorch_imports import DatasetFromNp
 
 # In[2]:
-
-
-data_dir = '../images_cwt_ssq/(15017, 224, 224)_my_scales_sqpy.npy'
+data_dir = '/home/tadeusz/Desktop/Tadeusz/mgr_sleep_states/images_cwt_ssq/(15017, 224, 224)_my_scales_sqpy.npy'
 data_np = np.load(data_dir)
 d = m.load_all_data()
 targets = m.load_all_labels()
 d, targets = m.remove_ecg_artifacts(d, targets)
-targets = m.three_stages_transform(targets)
+targets = m.two_stages_transform(targets)
 assert len(targets) == len(data_np)
 
 # In[3]:
 # Hyperparameters
+nr_of_classes = len(set(targets))
+num_epochs = 25
 batch_size = 10
+SGD_learning_rate = 0.001
+SGD_momentum = 0.9
+sched_step_size = 7
+sched_gamma = 0.1
 
+from collections import Counter
+Counter(targets)
+
+# In[9]:
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+model_18 = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+num_ftrs = model_18.fc.in_features
+model_18
+
+# In[21]:
+
+model_18.fc = nn.Linear(num_ftrs, nr_of_classes)
+model_18.to(device)
+# inbalanced dataset 4 to 1 so adding weights to criterion
+crit_weights = torch.tensor([5.8, 1.]).to(device)
+#crit_weights = torch.tensor([4., 1., 4.]).to(device)
+criterion = nn.CrossEntropyLoss(weight=crit_weights)
+optimizer_18 = optim.SGD(model_18.parameters(), lr=SGD_learning_rate, momentum=SGD_momentum)
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_18, step_size=sched_step_size, gamma=sched_gamma)
 # In[4]:
-
 
 # setting up tranforms for the images (just normalizing pretty much)
 data_transforms = transforms.Compose([
@@ -48,7 +72,7 @@ data_transforms = transforms.Compose([
 
 dataset_all = DatasetFromNp(data_np, target=targets, transform=data_transforms)
 
-generator = torch.Generator().manual_seed(22)
+generator = torch.Generator().manual_seed(23)
 train_data, test_data = random_split(dataset_all, [0.8, 0.2], generator=generator)
 datasets = {'train': train_data, 'val': test_data}
 dataloaders = {x: torch.utils.data.DataLoader(datasets[x], batch_size=batch_size, shuffle=True, num_workers=4) for x in
@@ -56,8 +80,6 @@ dataloaders = {x: torch.utils.data.DataLoader(datasets[x], batch_size=batch_size
 dataset_sizes = {x: len(datasets[x]) for x in ['train', 'val']}
 # remove a fixed generator for training
 
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # In[6]:
 # not necessarily test_data subset has to be there can be anything else
@@ -69,8 +91,6 @@ grid = torchvision.utils.make_grid(inputs)
 
 
 # In[7]:
-
-
 def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
 
@@ -80,10 +100,15 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
         torch.save(model.state_dict(), best_model_params_path)
         best_acc = 0.0
+        val_acc = []
+        val_losses = []
+        train_acc = []
+        train_losses = []
 
         for epoch in range(num_epochs):
             print(f'Epoch {epoch + 1}/{num_epochs}')
             print('-' * 10)
+
 
             # Each epoch has a training and validation phase
             for phase in ['train', 'val']:
@@ -124,6 +149,13 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
                 epoch_loss = running_loss / dataset_sizes[phase]
                 epoch_acc = running_corrects.double() / dataset_sizes[phase]
+                # saving the training statistics
+                if phase == 'train':
+                    train_losses.append(epoch_loss)
+                    train_acc.append(epoch_acc)
+                elif phase == 'val':
+                    val_losses.append(epoch_loss)
+                    val_acc.append(epoch_acc)
 
                 print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
@@ -140,37 +172,20 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
         # load best model weights
         model.load_state_dict(torch.load(best_model_params_path))
-    return model
+    return model, train_acc, val_acc, train_losses, val_losses
 
-
-# In[9]:
-
-
-model_18 = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-num_ftrs = model_18.fc.in_features
-model_18
-
-# In[21]:
-nr_of_classes = len(set(targets))
-model_18.fc = nn.Linear(num_ftrs, nr_of_classes)
-model_18.to(device)
-# inbalanced dataset 4 to 1 so adding weights to criterion
-crit_weitghts = torch.tensor([4., 1., 4.]).to(device)
-criterion = nn.CrossEntropyLoss(weight=crit_weitghts)
-optimizer_18 = optim.SGD(model_18.parameters(), lr=0.001, momentum=0.9)
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_18, step_size=7, gamma=0.1)
 
 # In[22]:
 
 
-model_18 = train_model(model_18, criterion, optimizer_18, exp_lr_scheduler,
-                       num_epochs=25)
+model_18, train_acc, val_acc, *_ = train_model(model_18, criterion, optimizer_18, exp_lr_scheduler,
+                                               num_epochs=num_epochs)
 
 # In[11]:
 
 
 dir_saved_models = '../saved_models'
-torch.save(model_18, dir_saved_models + f'/{type(model_18).__name__}_{date.today().strftime("%b-%d-%Y")}')
+torch.save(model_18, dir_saved_models + f'/{type(model_18).__name__}_{datetime.now().strftime("%b-%d-%Y-%H-%M")}')
 
 # In[12]:
 
@@ -187,7 +202,7 @@ with torch.no_grad():
         labels.append(l)
 
 # In[11]:
-predictions =  [torch.max(y, 1).indices for y in predictions]
+predictions = [torch.max(y, 1).indices for y in predictions]
 
 # In[11]:
 
@@ -223,11 +238,13 @@ with torch.no_grad():
         predictions.append(all_outputs)
         labels.append(l)
 predictions = [torch.max(y, 1).indices for y in predictions]
-predictions = torch.flatten(torch.stack(predictions))
+predictions = torch.flatten(torch.stack(predictions)).to('cpu')
 labels = torch.flatten(torch.stack(labels))
-confusion_matrix(labels, predictions.to('cpu'))
-
-# In [28]:
-running_corrects = torch.sum(predictions == labels)
-
-
+conf_m = confusion_matrix(labels, predictions.to('cpu'))
+conf_m
+# In[22]:
+train_acc = torch.tensor(train_acc).tolist()
+val_acc = torch.tensor(val_acc).tolist()
+plt.plot(train_acc)
+plt.plot(val_acc)
+plt.show()

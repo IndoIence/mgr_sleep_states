@@ -7,3 +7,5 @@ pillow~=9.4.0
 scipy~=1.10.1
 ssqueezepy~=0.6.3
 scikit-learn~=1.2.2
+plotly~=5.9.0
+neurokit2~=0.2.5

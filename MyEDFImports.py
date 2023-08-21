@@ -38,21 +38,13 @@ def import_stages(name, path=edf_dir):
 
 
 def import_ecg(name, tmin=0, tmax=np.inf, path=edf_dir, ):
+    """takes a name, returns a raw !!! if importing the CP229110.edf file, the data is flipped"""
     raw = mne.io.read_raw_edf(path + "//" + name)
     ecg_ind = mne.pick_channels_regexp(raw.info['ch_names'], 'ECG*')
     incl_ch = [raw.info['ch_names'][i] for i in ecg_ind]
     raw.pick_channels(incl_ch)
     if tmin == 0 and tmax == np.inf:
         return raw
-    raw.crop(tmin=tmin, tmax=tmax)
-    return raw
-
-
-def import_eeg(name, tmin, tmax, path=edf_dir, ):
-    """this doesn't work if you don't give tmin and tmax -> should be improved"""
-    raw = mne.io.read_raw_edf(path + "//" + name)
-    incl_ch = ["FP1A2 EEG"]
-    raw.pick_channels(incl_ch)
     raw.crop(tmin=tmin, tmax=tmax)
     return raw
 
@@ -67,14 +59,25 @@ def get_edf_filenames(path=edf_dir):
 
 
 def load_data_one_file(edf):
-    """takes in an EDF not a string"""
+    """takes in an EDF or a string with edf name:
+    returns np array of shape (nr_windows, 10000)"""
+    if type(edf) == str:
+        edf = import_ecg(edf)
     sampl_freq = edf.info["sfreq"]
     window_len = int(sampl_freq * 20)
     nr_windows = int(len(edf[0][1]) // window_len)
     print(f'{edf} with {nr_windows} windows')
+    # one of the edfs is inverted, returning it with y flipped
+    name = edf.filenames[0]
+    # get just the filename without the path
+    name = os.path.basename(name)
     y = edf[0][0].reshape(-1)
     y = y[0:nr_windows * window_len]
     y = y.reshape((-1, window_len))
+    if name == 'CP229110.edf':
+        print(f"importing inverted file: {name}")
+        print(f"{edf.filenames[0]}")
+        y = y*-1
     return y
 
 
@@ -122,6 +125,15 @@ def three_stages_transform(l):
             return 0
         if n == 5:
             return 2
+        return 1
+
+    return list(map(helper, l))
+
+
+def two_stages_transform(l):
+    def helper(n):
+        if n == 0:
+            return 0
         return 1
 
     return list(map(helper, l))
