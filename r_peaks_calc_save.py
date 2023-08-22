@@ -97,7 +97,11 @@ if __name__ == '__main__':
     # TODO: investigate why I am getting 0 files with label 5
     # In[]
     windows_stream = make_windows(data, labels_init, win_pad=2)
-    windows_r_peaks_stream = calc_r_peaks(windows_stream)
-    del_from_dir('r_peaks')
-    save_to_csv(windows_r_peaks_stream)
+    windows, labels = zip(*windows_stream)
+    lengths = [len(w) for w in windows]
+    plt.plot(lengths)
+    plt.show()
+    #windows_r_peaks_stream = calc_r_peaks(windows_stream)
+    #del_from_dir('r_peaks')
+    #save_to_csv(windows_r_peaks_stream)
 
