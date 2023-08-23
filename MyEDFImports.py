@@ -6,7 +6,7 @@ import sys
 
 from matplotlib import pyplot as plt
 
-edf_dir = r"/home/tadeusz/Desktop/Tadeusz/mgr_sleep_states/Jean-Pol_repaired_headers"
+edf_dir = r"Jean-Pol_repaired_headers"
 
 stages_names = {
     0: 'Wake',

@@ -61,6 +61,9 @@ def where_not_30bpm(peaks_list, len_data):
 
 
 def del_from_dir(dir):
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+        return
     assert dir == 'r_peaks'
     try:
         files = os.listdir(dir)
@@ -71,7 +74,7 @@ def del_from_dir(dir):
                 if os.path.isfile(file_path):
                     os.remove(file_path)
     except OSError:
-        print(f"Eror deleting in {dir}")
+        print(f"Error deleting in {dir}")
 
 
 def save_to_csv(windows_r_peaks_stream):
@@ -98,7 +101,7 @@ def load_r_peaks_csv(dir):
         if file[-4:] == '.csv':
             f_name = dir +f'/{file}'
             with open(f_name) as f:
-                reader = csv.reader(f_name)
+                reader = csv.reader(f)
                 for row in reader:
                     print(row)
                     lists.append([int(value) for value in row])
@@ -114,13 +117,17 @@ if __name__ == '__main__':
     windows_stream = make_windows(data, labels_init, win_pad=2)
     windows_r_peaks_stream = calc_r_peaks(windows_stream)
 
-    # windows_r_peaks_stream = calc_r_peaks(windows_stream)
     del_from_dir('r_peaks')
     save_to_csv(windows_r_peaks_stream)
 
     loaded = load_r_peaks_csv('r_peaks')
 
+
+# In[]
+    _, labels = zip(*make_windows(data, labels_init, 2))
+    from collections import Counter
+    Counter(labels)
     for label, peaks in loaded.items():
         print(label, len(peaks))
-
+# In[]
 
