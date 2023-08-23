@@ -31,14 +31,17 @@ def make_windows(data_list, labels_list, win_pad):
     for sleep_data, labels in zip(data_list, labels_list):
         n_wide_wind = len(labels) - win_pad * 2
         # cutting last few unlabeled seconds
-        labeled_data = sleep_data[:len(labels) * len(labels)]
+        labeled_data = sleep_data[:twenty_sec * len(labels)]
+        print(len(labeled_data))
         middle_labels = labels[win_pad:n_wide_wind + win_pad]
         for i, label in enumerate(middle_labels):
-            yield labeled_data[i * twenty_sec:(i * twenty_sec) + win_len], label
+            start = i * twenty_sec
+            stop = i * twenty_sec + win_len
+            # print(start, stop, len(labeled_data[start:stop]), label)
+            yield labeled_data[start:stop], label
 
 
 def calc_r_peaks(windows_stream):
-
     for one_window, label in windows_stream:
         try:
             peaks = nk2.ecg_peaks(one_window.flatten(), sampling_rate=s_freq)[1]['ECG_R_Peaks']
@@ -76,8 +79,6 @@ def save_to_csv(windows_r_peaks_stream):
     open_files = {}
     # i should append for every new peak_list, but delete at first the file
     for win, peaks, label in windows_r_peaks_stream:
-        if label == 5:
-            print(peaks, len(win))
         if label not in csv_writers:
             file = open(f'r_peaks/{label}.csv', 'a', newline='')
             writer = csv.writer(file)
@@ -89,19 +90,37 @@ def save_to_csv(windows_r_peaks_stream):
     for f in open_files.values():
         f.close()
 
+def load_r_peaks_csv(dir):
+    files = os.listdir(dir)
+    peaks = {}
+    for file in files:
+        lists = []
+        if file[-4:] == '.csv':
+            f_name = dir +f'/{file}'
+            with open(f_name) as f:
+                reader = csv.reader(f_name)
+                for row in reader:
+                    print(row)
+                    lists.append([int(value) for value in row])
+        peaks[int(file[:-4])] = lists
+    return peaks
+
 
 if __name__ == '__main__':
     edf_filenames = m.get_edf_filenames()[:1]
     # get data for every patient in a list of np arrays
     data, labels_init = load_data_labels(edf_filenames)
-    # TODO: investigate why I am getting 0 files with label 5
     # In[]
     windows_stream = make_windows(data, labels_init, win_pad=2)
-    windows, labels = zip(*windows_stream)
-    lengths = [len(w) for w in windows]
-    plt.plot(lengths)
-    plt.show()
-    #windows_r_peaks_stream = calc_r_peaks(windows_stream)
-    #del_from_dir('r_peaks')
-    #save_to_csv(windows_r_peaks_stream)
+    windows_r_peaks_stream = calc_r_peaks(windows_stream)
+
+    # windows_r_peaks_stream = calc_r_peaks(windows_stream)
+    del_from_dir('r_peaks')
+    save_to_csv(windows_r_peaks_stream)
+
+    loaded = load_r_peaks_csv('r_peaks')
+
+    for label, peaks in loaded.items():
+        print(label, len(peaks))
+
 
