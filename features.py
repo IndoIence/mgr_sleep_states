@@ -11,13 +11,10 @@ import statistics
 from matplotlib import pyplot as plt
 from scipy.stats import kurtosis
 from scipy.stats import skew
+from scipy.interpolate import interp1d
+from scipy.signal import welch
 
 import MyEDFImports as m
-
-'''#hrv values from hrv library
-
-results = time_domain(flat_rri)
-print(results)'''
 
 ####################### FEATURE DEFINITIONS ###################################
 """TIME DOMAIN"""
@@ -120,6 +117,8 @@ def calc_modifiedCVI(list):
     return L ** 2 / T
 
 
+
+
 # sliding window function
 def slidingWindow(sequence, winSize, step):
     """Returns a generator that will iterate through
@@ -167,6 +166,46 @@ def detrend(data):
     return data - trend
 
 
+
+def compute_hrv_metrics(rr_intervals, fs_resample=4.0):
+    """
+    Compute VLF, LF, HF powers and LF-to-HF ratio from RR intervals.
+
+    Parameters:
+    - rr_intervals: List of RR intervals in seconds.
+    - fs_resample: Resampling frequency (default is 4 Hz).
+
+    Returns:
+    - Dictionary containing VLF, LF, HF powers and LF-to-HF ratio.
+    """
+
+    # Time array
+    time_array = np.cumsum(rr_intervals)
+
+    # Interpolate to get evenly spaced values
+    time_interpolated = np.arange(0, time_array[-1], 1 / fs_resample)
+    interpolated_function = interp1d(time_array, rr_intervals, kind='cubic')
+    rr_interpolated = interpolated_function(time_interpolated)
+
+    # Compute the power spectral density using Welch's method
+    f, psd = welch(rr_interpolated, fs=fs_resample, nperseg=256, noverlap=128)
+
+    # Integrate the power in the VLF, LF, and HF bands
+    vlf_power = np.trapz(psd[(f >= 0.0033) & (f < 0.04)])
+    lf_power = np.trapz(psd[(f >= 0.04) & (f < 0.15)])
+    hf_power = np.trapz(psd[(f >= 0.15) & (f < 0.4)])
+
+    # Compute LF-to-HF ratio
+    lf_hf_ratio = lf_power / hf_power
+
+    return {
+        "VLF": vlf_power,
+        "LF": lf_power,
+        "HF": hf_power,
+        "LF/HF": lf_hf_ratio
+    }
+
+
 def absolute(data):
     return np.abs(data)
 
@@ -185,7 +224,8 @@ def get_all_functions_dict():
         "SD1/SD2": calc_SD1overSD2,
         "CSI": calc_CSI,
         "CVI": calc_CVI,
-        "modifiedCVI": calc_modifiedCVI
+        "modifiedCVI": calc_modifiedCVI,
+        "HRV_metrics": compute_hrv_metrics
     }
     # Add percentile functions directly to the feature_funcs dictionary
     percentiles = [5, 10, 25, 50, 75, 90, 95]
@@ -245,19 +285,7 @@ def bayesianOnFeatures(list_rri, winSize, step):
 
 
 #################### CHANGE POINT DETECTION ##########################
-if __name__ == '__main__':
-    func_names = list(get_all_functions_dict().keys())
-    func_names.remove('RMSSD')
-    print(func_names)
 
-    ########################### DATA PROCESSING ###################################
-    filename = 'r_peaks_220s'
-    peaks = m.load_r_peaks_csv(filename)
-    # for shallow sleep
-    example_peaks = peaks[1]
-    rrs = [np.diff(p) for p in example_peaks]
-    # In[]
-    features = feature_extract(window_stream=rrs, features=func_names)
 
 
     '''get the rolling mean and also plot the data'''
