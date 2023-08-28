@@ -1,3 +1,4 @@
+import csv
 import os
 import pandas as pd
 import mne
@@ -139,27 +140,59 @@ def two_stages_transform(l):
     return list(map(helper, l))
 
 
-def remove_ecg_artifacts(data, labels=None, threshold=0.003):
-    # removes all 20s datapoints and their labels from the pool if there is a point over certain threshold
-    ecg_artifact_filter = np.all(np.abs(data) <= threshold, axis=1)
-    if labels is not None:
-        labels = labels[ecg_artifact_filter]
-    data = data[ecg_artifact_filter]
-    return data, labels
+def load_data_labels(names):
+    raw_data_all = []
+    labels_all = []
+    for edf_filename in names:
+        edf_labels = load_labels_one_file(edf_filename)
+        raw = import_ecg(edf_filename)
+        data = raw[0][0].flatten()
+        raw_data_all.append(data)
+        labels_all.append(edf_labels)
+
+    return raw_data_all, labels_all
 
 
-def draw_hypnogram(y, y_stages, name=None):
-    assert len(y) == len(y_stages)
-    fig, ax1 = plt.subplots(figsize=(20, 6))
-    ax2 = ax1.twinx()
-    ax1.step(y, 'b-')
-    ax2.step(y_stages, 'g-')
-    ax2.invert_yaxis()
-    ax1.set_xlabel('time [s]')
-    ax1.set_ylabel('Voltage [V]', color='b')
-    ax2.set_ylabel('Sleep Stage', color='g')
-    ax1.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
-    # plt.legend(['ECG'])
-    if name is not None:
-        plt.title(f"ECG of {name}")
-    return ax1
+def make_windows(data_list, labels_list, win_pad):
+    """win_pad -> number of windows taken from left and right to the labeled window"""
+    assert len(data_list) == len(labels_list)
+    assert win_pad > 0 and type(win_pad) == int
+    win_len = (2 * win_pad + 1) * 500 * 20
+    twenty_sec = 20 * 500
+    for sleep_data, labels in zip(data_list, labels_list):
+        n_wide_wind = len(labels) - win_pad * 2
+        # cutting last few unlabeled seconds
+        labeled_data = sleep_data[:twenty_sec * len(labels)]
+        print(len(labeled_data))
+        middle_labels = labels[win_pad:n_wide_wind + win_pad]
+        for i, label in enumerate(middle_labels):
+            start = i * twenty_sec
+            stop = i * twenty_sec + win_len
+            # print(start, stop, len(labeled_data[start:stop]), label)
+            yield labeled_data[start:stop], label
+
+def load_r_peaks_csv(dir):
+    files = os.listdir(dir)
+    peaks = {}
+    for file in files:
+        lists = []
+        if file[-4:] == '.csv':
+            f_name = dir + f'/{file}'
+            with open(f_name) as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    lists.append(np.array([int(value) for value in row]))
+        peaks[int(file[:-4])] = lists
+    return peaks
+
+
+
+
+# def remove_ecg_artifacts(data, labels=None, threshold=0.003):
+#     # removes all 20s datapoints and their labels from the pool if there is a point over certain threshold
+#     ecg_artifact_filter = np.all(np.abs(data) <= threshold, axis=1)
+#     if labels is not None:
+#         labels = labels[ecg_artifact_filter]
+#     data = data[ecg_artifact_filter]
+#     return data, labels
+#
